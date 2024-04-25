@@ -1,87 +1,74 @@
 import streamlit as st
-import pandas as pd
-from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import LabelEncoder, RobustScaler
-from sklearn.model_selection import train_test_split
-from sklearn.linear_model import LinearRegression
 import pickle
+import pandas as pd
+import numpy as np
+from sklearn.preprocessing import LabelEncoder, RobustScaler
 
-# Load the trained model
-with open('./experiments/lin_reg_model.pkl', 'rb') as f:
-    model = pickle.load(f)
+# Load the trained model and scaler
+with open("./experiments/lin_reg_model.pkl", "rb") as f:
+    model, scaler = pickle.load(f)
 
 # Create a Streamlit app
-st.title("Airbnb Price Predictor")
+st.title("Airbnb Listing Predictor")
 
-# Create a form with input fields
-form = st.form(key="airbnb-predict-form")
+# Create input fields with dropdowns, sliders, and text inputs
+host_identity_verified = st.selectbox(
+    "Host Identity Verified", ["unconfirmed", "verified"])
+neighbourhood_group = st.selectbox("Neighbourhood Group", [
+                                   "Brooklyn", "Manhattan", "Queens", "Bronx", "Staten Island"])
+instant_bookable = st.selectbox("Instant Bookable", ["True", "False"])
+cancellation_policy = st.selectbox(
+    "Cancellation Policy", ["strict", "moderate", "flexible"])
+room_type = st.selectbox(
+    "Room Type", ["Private room", "Entire home/apt", "Shared room", "Hotel room"])
+construction_year = st.slider("Construction Year", 2003, 2022, 2022)
+service_fee = st.slider("Service Fee", 0.0, 240.0, 0.0)
+min_nights = st.slider("Min Nights", 1.0, 5645.0, 1.0)
+num_of_reviews = st.slider("Num of Reviews", 0.0, 1024.0, 0.0)
+reviews_per_month = st.slider("Reviews per Month", 0.01, 90.0, 0.01)
+review_rate_number = st.slider("Review Rate Number", 1.0, 5.0, 1.0)
+calculated_host_listings_count = st.slider(
+    "Calculated Host Listings Count", 1.0, 332.0, 1.0)
+availability_365 = st.slider("Availability 365", 0.0, 365.0, 0.0)
 
-with form:
-    # Add input fields with hints and help
-    host_identity_verified = st.selectbox("Host Identity Verified", [
-                                          "unconfirmed", "verified"], help="Select host identity verification status")
-    neighbourhood_group = st.selectbox("Neighbourhood Group", [
-                                       "Brooklyn", "Manhattan", "Queens", "Bronx", "Staten Island"], help="Select neighbourhood group")
-    instant_bookable = st.checkbox(
-        "Instant Bookable", help="Check if instant booking is available")
-    cancellation_policy = st.selectbox("Cancellation Policy", [
-                                       "strict", "moderate", "flexible"], help="Select cancellation policy")
-    room_type = st.selectbox("Room Type", [
-                             "Private room", "Entire home/apt", "Shared room", "Hotel room"], help="Select room type")
-    construction_year = st.number_input("Construction Year", min_value=2003,
-                                        max_value=2022, value=2010, help="Enter construction year (2003-2022)")
-    service_fee = st.number_input(
-        "Service Fee", min_value=0.0, max_value=240.0, value=20.0, help="Enter service fee (0-240)")
-    min_nights = st.number_input("Minimum Nights", min_value=1.0,
-                                 max_value=5645.0, value=30.0, help="Enter minimum nights (1-5645)")
-    num_of_reviews = st.number_input("Number of Reviews", min_value=0.0,
-                                     max_value=1024.0, value=50.0, help="Enter number of reviews (0-1024)")
-    reviews_per_month = st.number_input(
-        "Reviews per Month", min_value=0.01, max_value=90.0, value=5.0, help="Enter reviews per month (0.01-90)")
-    review_rate_number = st.number_input(
-        "Review Rate Number", min_value=1.0, max_value=5.0, value=4.0, help="Enter review rate number (1-5)")
-    calculated_host_listings_count = st.number_input(
-        "Calculated Host Listings Count", min_value=1.0, max_value=332.0, value=100.0, help="Enter calculated host listings count (1-332)")
-    availability_365 = st.number_input(
-        "Availability (365 days)", min_value=0.0, max_value=365.0, value=180.0, help="Enter availability (0-365)")
+# Create a button to make predictions
+if st.button("Make Prediction"):
+    # Create a dictionary to store the input values
+    input_values = {
+        "host_identity_verified": [host_identity_verified],
+        "neighbourhood_group": [neighbourhood_group],
+        "instant_bookable": [1 if instant_bookable == "True" else 0],
+        "cancellation_policy": [cancellation_policy],
+        "room_type": [room_type],
+        "construction_year": [construction_year],
+        "service_fee": [service_fee],
+        "min_nights": [min_nights],
+        "num_of_reviews": [num_of_reviews],
+        "reviews_per_month": [reviews_per_month],
+        "review_rate_number": [review_rate_number],
+        "calculated_host_listings_count": [calculated_host_listings_count],
+        "availability_365": [availability_365]
+    }
 
-    # Add a submit button
-    submitted = st.form_submit_button("Predict Price")
+    # Convert dictionary to dataframe
+    input_df = pd.DataFrame(input_values)
 
-# Create a container for the prediction output
-output_container = st.container()
+    # Encode categorical features
+    label_encoders = {
+        "host_identity_verified": LabelEncoder(),
+        "neighbourhood_group": LabelEncoder(),
+        "cancellation_policy": LabelEncoder(),
+        "room_type": LabelEncoder()
+    }
 
-if submitted:
-    # Create a DataFrame with the input values
-    input_data = pd.DataFrame({
-        'host_identity_verified': [host_identity_verified],
-        'neighbourhood_group': [neighbourhood_group],
-        'instant_bookable': [instant_bookable],
-        'cancellation_policy': [cancellation_policy],
-        'room_type': [room_type],
-        'construction_year': [construction_year],
-        'service_fee': [service_fee],
-        'min_nights': [min_nights],
-        'num_of_reviews': [num_of_reviews],
-        'reviews_per_month': [reviews_per_month],
-        'review_rate_number': [review_rate_number],
-        'calculated_host_listings_count': [calculated_host_listings_count],
-        'availability_365': [availability_365]
-    })
+    for feature, encoder in label_encoders.items():
+        input_df[feature] = encoder.fit_transform(input_df[feature])
 
-    # Create a pipeline with LabelEncoder, RobustScaler, and LinearRegression
-    pipeline = Pipeline([
-        ('encoder', LabelEncoder()),
-        ('scaler', RobustScaler()),
-        ('model', LinearRegression())
-    ])
+    # Scale features
+    scaled_input_df = scaler.fit_transform(input_df)
 
-    # Fit the pipeline to the input data
-    pipeline.fit(input_data)
+    # Make predictions using the trained model
+    predicted_price = model.predict(scaled_input_df)
 
-    # Make a prediction using the pipeline
-    prediction = pipeline.predict(input_data)
-
-    # Display the predicted price
-    with output_container:
-        st.write(f"Predicted Price: ${prediction[0]:.2f}")
+    # Display the prediction
+    st.write("Prediction:", predicted_price)
